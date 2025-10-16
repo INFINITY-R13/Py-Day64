@@ -8,17 +8,71 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, FloatField
 from wtforms.validators import DataRequired, NumberRange
 import requests
+import os
+
+# Try to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not installed, that's okay
+    pass
 
 # --- API Configuration ---
 # You need to get your own API key from themoviedb.org
-MOVIE_DB_API_KEY = "USE_YOUR_OWN_CODE"
+MOVIE_DB_API_KEY = os.environ.get('TMDB_API_KEY')
 MOVIE_DB_SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 MOVIE_DB_INFO_URL = "https://api.themoviedb.org/3/movie"
 MOVIE_DB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
+# Check if API key is set
+if not MOVIE_DB_API_KEY:
+    print("⚠️  WARNING: TMDB_API_KEY environment variable not set!")
+    print("   Using mock data for testing. Set TMDB_API_KEY for real functionality.")
+
+# Mock movie data for testing when no API key is available
+MOCK_MOVIES = [
+    {
+        "id": 1,
+        "title": "The Shawshank Redemption",
+        "release_date": "1994-09-23",
+        "overview": "Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.",
+        "poster_path": "/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg"
+    },
+    {
+        "id": 2,
+        "title": "The Godfather",
+        "release_date": "1972-03-14",
+        "overview": "The aging patriarch of an organized crime dynasty transfers control of his clandestine empire to his reluctant son.",
+        "poster_path": "/3bhkrj58Vtu7enYsRolD1fZdja1.jpg"
+    },
+    {
+        "id": 3,
+        "title": "Pulp Fiction",
+        "release_date": "1994-09-10",
+        "overview": "The lives of two mob hitmen, a boxer, a gangster and his wife intertwine in four tales of violence and redemption.",
+        "poster_path": "/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg"
+    },
+    {
+        "id": 4,
+        "title": "Inception",
+        "release_date": "2010-07-16",
+        "overview": "A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.",
+        "poster_path": "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg"
+    },
+    {
+        "id": 5,
+        "title": "The Matrix",
+        "release_date": "1999-03-30",
+        "overview": "A computer hacker learns from mysterious rebels about the true nature of his reality and his role in the war against its controllers.",
+        "poster_path": "/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg"
+    }
+]
+
 # --- Flask App Initialization ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+# CSRF is enabled by default for security
 Bootstrap5(app) # Initialize Bootstrap for styling
 
 # --- Database Configuration ---
@@ -88,40 +142,89 @@ def home():
 
 @app.route("/add", methods=["GET", "POST"])
 def add_movie():
-    """Handles adding a new movie by searching the TMDB API."""
+    """Handles adding a new movie by searching the TMDB API or using mock data."""
     form = FindMovieForm()
     if form.validate_on_submit():
-        movie_title = form.title.data
-        # Make a request to the TMDB API to search for the movie
-        response = requests.get(MOVIE_DB_SEARCH_URL, params={
-                                "api_key": MOVIE_DB_API_KEY, "query": movie_title})
-        data = response.json()["results"]
-        # Render a page for the user to select the correct movie from the results
-        return render_template("select.html", options=data)
+        movie_title = form.title.data.lower()
+        
+        if MOVIE_DB_API_KEY:
+            # Use real API
+            try:
+                response = requests.get(MOVIE_DB_SEARCH_URL, params={
+                                        "api_key": MOVIE_DB_API_KEY, "query": movie_title})
+                response.raise_for_status()
+                data = response.json()["results"]
+                return render_template("select.html", options=data)
+            except (requests.RequestException, KeyError):
+                # If API fails, fall back to mock data
+                mock_results = MOCK_MOVIES
+                return render_template("select.html", options=mock_results, 
+                                     mock_mode=True, search_term=movie_title, 
+                                     api_fallback=True)
+        else:
+            # Use mock data for testing
+            mock_results = [movie for movie in MOCK_MOVIES 
+                           if movie_title in movie["title"].lower()]
+            
+            if not mock_results:
+                # If no matches, show all available movies
+                mock_results = MOCK_MOVIES
+                
+            return render_template("select.html", options=mock_results, 
+                                 mock_mode=True, search_term=movie_title)
+    
     return render_template("add.html", form=form)
 
 
 @app.route("/find")
 def find_movie():
-    """Finds movie details from TMDB API and adds it to the local database."""
+    """Finds movie details from TMDB API or mock data and adds it to the local database."""
     movie_api_id = request.args.get("id")
     if movie_api_id:
-        movie_api_url = f"{MOVIE_DB_INFO_URL}/{movie_api_id}"
-        # Get detailed movie info using its API ID
-        response = requests.get(movie_api_url, params={
-                                "api_key": MOVIE_DB_API_KEY, "language": "en-US"})
-        data = response.json()
-        # Create a new Movie object with the fetched data
-        new_movie = Movie(
-            title=data["title"],
-            year=data["release_date"].split("-")[0], # Extract the year
-            img_url=f"{MOVIE_DB_IMAGE_URL}{data['poster_path']}",
-            description=data["overview"]
-        )
-        db.session.add(new_movie)
-        db.session.commit()
-        # Redirect the user to rate the movie they just added
-        return redirect(url_for("rate_movie", id=new_movie.id))
+        if MOVIE_DB_API_KEY:
+            # Use real API
+            try:
+                movie_api_url = f"{MOVIE_DB_INFO_URL}/{movie_api_id}"
+                response = requests.get(movie_api_url, params={
+                                        "api_key": MOVIE_DB_API_KEY, "language": "en-US"})
+                response.raise_for_status()
+                data = response.json()
+                new_movie = Movie(
+                    title=data["title"],
+                    year=data["release_date"].split("-")[0],
+                    img_url=f"{MOVIE_DB_IMAGE_URL}{data['poster_path']}",
+                    description=data["overview"]
+                )
+                db.session.add(new_movie)
+                db.session.commit()
+                return redirect(url_for("rate_movie", id=new_movie.id))
+            except (requests.RequestException, KeyError):
+                # If API fails, redirect to home
+                return redirect(url_for("home"))
+        else:
+            # Use mock data
+            try:
+                movie_id = int(movie_api_id)
+                mock_movie = next((m for m in MOCK_MOVIES if m["id"] == movie_id), None)
+                
+                if mock_movie:
+                    new_movie = Movie(
+                        title=mock_movie["title"],
+                        year=int(mock_movie["release_date"].split("-")[0]),
+                        img_url=f"{MOVIE_DB_IMAGE_URL}{mock_movie['poster_path']}",
+                        description=mock_movie["overview"]
+                    )
+                    db.session.add(new_movie)
+                    db.session.commit()
+                    return redirect(url_for("rate_movie", id=new_movie.id))
+                else:
+                    # Movie not found, redirect to home
+                    return redirect(url_for("home"))
+            except ValueError:
+                # Invalid ID, redirect to home
+                return redirect(url_for("home"))
+    
+    return redirect(url_for("home"))
 
 
 @app.route("/edit", methods=["GET", "POST"])

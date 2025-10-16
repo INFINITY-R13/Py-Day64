@@ -2,7 +2,7 @@ Flask==3.1.2
 Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.2
 Bootstrap-Flask==2.3.3
-WTForms>=3.1.0
+WTForms==3.1.2
 SQLAlchemy==2.0.44
-Werkzeug>=3.0.1
-requests==2.31.0
+Werkzeug==3.0.4
+requests==2.32.3

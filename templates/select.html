@@ -5,11 +5,64 @@
 {% block content %}
 <div class="container">
     <h1 class="heading">Select Movie</h1>
+    
+    {% if mock_mode %}
+    <div class="mock-notice">
+        <p><strong>🎬 {% if api_fallback %}API Unavailable - {% endif %}Demo Mode:</strong> Using sample movies for testing. 
+        {% if search_term %}
+        {% if api_fallback %}
+        API request failed for "{{ search_term }}" - showing sample movies instead.
+        {% else %}
+        No exact matches for "{{ search_term }}" - showing all available movies.
+        {% endif %}
+        {% endif %}
+        </p>
+    </div>
+    {% endif %}
+    
     {% for movie in options: %}
-  <p>
-    <a href="{{ url_for('find_movie', id=movie.id) }} ">{{ movie.title }} - {{movie.release_date}}</a>
-  </p>
-  {% endfor %}
+    <div class="movie-option">
+        <a href="{{ url_for('find_movie', id=movie.id) }}">
+            <strong>{{ movie.title }}</strong> - {{ movie.release_date }}
+        </a>
+        <p class="movie-description">{{ movie.overview[:100] }}...</p>
+    </div>
+    {% endfor %}
 
 </div>
+
+<style>
+.mock-notice {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 2rem;
+    border: 1px solid #bee5eb;
+}
+
+.movie-option {
+    background: white;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.movie-option a {
+    text-decoration: none;
+    color: #1a57e6;
+    font-size: 1.1rem;
+}
+
+.movie-option a:hover {
+    text-decoration: underline;
+}
+
+.movie-description {
+    color: #666;
+    margin: 0.5rem 0 0 0;
+    font-size: 0.9rem;
+}
+</style>
 {% endblock %}
